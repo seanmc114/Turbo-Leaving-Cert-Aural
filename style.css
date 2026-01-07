@@ -1,218 +1,450 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Turbo Aural</title>
-  <link rel="stylesheet" href="style.css?v=TAURAL_HLOL_1" />
-</head>
-<body>
-  <!-- Crest watermark (expects crest.png in the same folder) -->
-  <div class="crest-watermark" aria-hidden="true"></div>
+/* Turbo Aural — CLEAN v1 (bright, comfy, big targets) */
 
-  <main class="wrap">
-    <header class="topbar">
-      <div class="brand">
-        <div class="logo-dot" aria-hidden="true"></div>
-        <div>
-          <h1>Turbo Aural</h1>
-          <p class="sub">Leaving Cert Spanish — link-out listening practice</p>
-        </div>
-      </div>
+:root{
+  --ink:#071023;
+  --muted:rgba(7,16,35,0.72);
 
-      <div class="pill-row">
-        <span class="pill" id="pillYear">Year: —</span>
-        <span class="pill" id="pillPaperLevel">Level: —</span>
-        <span class="pill" id="pillMode">Mode: —</span>
-      </div>
-    </header>
+  --card: rgba(255,255,255,0.86);
+  --stroke: rgba(7,16,35,0.12);
+  --shadow: 0 18px 48px rgba(2,6,23,0.18);
 
-    <!-- HOME -->
-    <section class="card" id="screenHome">
-      <div class="card-head">
-        <h2>Choose your setup</h2>
-        <p class="muted">
-          Use a <b>Match Code</b> so everyone gets the same 10 prompts on their own device.
-        </p>
-      </div>
+  --r: 22px;
 
-      <div class="grid2">
-        <div class="field">
-          <label for="yearSelect">Exam year</label>
-          <select id="yearSelect"></select>
-        </div>
+  --blue:#2563eb;
+  --green:#22c55e;
+  --amber:#f59e0b;
+  --red:#ef4444;
+  --purple:#a855f7;
+  --cyan:#06b6d4;
+}
 
-        <div class="field">
-          <label for="paperLevelSelect">Paper level (HL / OL)</label>
-          <select id="paperLevelSelect">
-            <option value="higher">Higher</option>
-            <option value="ordinary">Ordinary</option>
-          </select>
-        </div>
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
 
-        <div class="field">
-          <label for="levelSelect">Turbo level (1 easy → 10 tough)</label>
-          <select id="levelSelect"></select>
-        </div>
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  color: var(--ink);
+  background:
+    radial-gradient(900px 650px at 10% 12%, rgba(37,99,235,0.36), transparent 60%),
+    radial-gradient(900px 650px at 90% 18%, rgba(168,85,247,0.32), transparent 62%),
+    radial-gradient(900px 650px at 52% 95%, rgba(34,197,94,0.26), transparent 62%),
+    linear-gradient(120deg, rgba(245,158,11,0.25), rgba(239,68,68,0.22), rgba(6,182,212,0.18));
+  overflow-x:hidden;
+}
 
-        <div class="field">
-          <label for="modeSelect">Mode</label>
-          <select id="modeSelect">
-            <option value="classic">Classic</option>
-            <option value="sprint">Sprint (time cap)</option>
-            <option value="survival">Survival (0 wrong)</option>
-            <option value="relay">Relay (Player A then Player B)</option>
-          </select>
-        </div>
+.crest-watermark{
+  position: fixed;
+  inset: 0;
+  background: url("crest.png") no-repeat center / min(860px, 92vw);
+  opacity: 0.12;
+  pointer-events:none;
+  z-index: 0;
+}
 
-        <div class="field">
-          <label>Quick links</label>
-          <div class="btn-row">
-            <button class="btn btn-soft" id="openAudioBtn" type="button">Open Audio (EducatePlus)</button>
-            <button class="btn btn-soft" id="openPaperBtn" type="button">Open Paper (Exams.ie)</button>
-          </div>
-          <p class="hint">Audio is shared HL/OL; Paper link switches HL/OL.</p>
-        </div>
+.wrap{
+  position: relative;
+  z-index: 1;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 18px 14px 44px;
+}
 
-        <div class="field">
-          <label>Key rule</label>
-          <div class="rule-chip">
-            Time + penalties. Blanks count as wrong.
-          </div>
-        </div>
-      </div>
+/* Header */
+.topbar{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
 
-      <div class="divider"></div>
+.brand{
+  display:flex;
+  align-items:center;
+  gap: 12px;
+}
 
-      <div class="grid2">
-        <div class="field">
-          <label for="matchInput">Join with Match Code (7 characters)</label>
-          <div class="btn-row">
-            <input id="matchInput" type="text" inputmode="latin" maxlength="7" placeholder="e.g. 8A H C0Z K" />
-            <button class="btn btn-primary" id="joinMatchBtn" type="button">Join</button>
-          </div>
-          <p class="hint">Spaces ignored. Code includes Year + HL/OL + Turbo Level + Mode + Seed.</p>
-        </div>
+.brandMark{
+  width: 62px;
+  height: 62px;
+  border-radius: 18px;
+  display:grid;
+  place-items:center;
+  font-weight: 1100;
+  color: white;
+  background: linear-gradient(135deg, var(--red), var(--amber), var(--blue), var(--purple));
+  border: 1px solid rgba(255,255,255,0.55);
+  box-shadow: 0 14px 24px rgba(2,6,23,0.16);
+}
 
-        <div class="field">
-          <label>Start a new match</label>
-          <div class="btn-row">
-            <button class="btn btn-primary" id="newMatchBtn" type="button">Generate Match Code</button>
-            <button class="btn btn-ghost" id="startSoloBtn" type="button">Start (Solo)</button>
-          </div>
-          <p class="hint">For class competitions: generate once, everyone joins.</p>
-        </div>
-      </div>
+h1{
+  margin:0;
+  font-size: 34px;
+  font-weight: 1100;
+  letter-spacing: -0.02em;
+}
 
-      <div class="info-box">
-        <h3>How to run it in class (fast)</h3>
-        <ol>
-          <li>Pick <b>Year</b> + <b>HL/OL</b> and click <b>Generate Match Code</b>.</li>
-          <li>Students enter the same code on their own devices.</li>
-          <li>They click <b>Open Audio</b> and <b>Open Paper</b> and complete the 10 prompts.</li>
-          <li>After checking the marking scheme, they tick anything wrong → score updates → they read out the <b>Result Code</b>.</li>
-        </ol>
-      </div>
-    </section>
+.sub{
+  margin: 4px 0 0;
+  font-weight: 850;
+  color: rgba(7,16,35,0.78);
+}
 
-    <!-- GAME -->
-    <section class="card hidden" id="screenGame">
-      <div class="game-head">
-        <div class="left">
-          <h2 id="gameTitle">Round</h2>
-          <div class="meta">
-            <span class="tag" id="matchTag">Match: —</span>
-            <span class="tag" id="penaltyTag">Penalty: —</span>
-            <span class="tag" id="capTag">Sprint cap: —</span>
-          </div>
-        </div>
+.pills{
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 
-        <div class="right">
-          <div class="timer" id="timer">00:00.0</div>
-          <div class="btn-row">
-            <button class="btn btn-soft" id="audioQuickBtn" type="button">Audio</button>
-            <button class="btn btn-soft" id="paperQuickBtn" type="button">Paper</button>
-            <button class="btn btn-ghost" id="quitBtn" type="button">Quit</button>
-          </div>
-        </div>
-      </div>
+.pill{
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.80);
+  border: 1px solid rgba(255,255,255,0.65);
+  box-shadow: 0 10px 18px rgba(2,6,23,0.12);
+  font-weight: 1000;
+}
 
-      <div class="prompt-wrap" id="promptWrap"></div>
+/* Cards */
+.card{
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 18px;
+  backdrop-filter: blur(10px);
+}
 
-      <div class="game-actions">
-        <button class="btn btn-ghost" id="prevBtn" type="button">Back</button>
-        <button class="btn btn-primary" id="nextBtn" type="button">Next</button>
-        <button class="btn btn-primary hidden" id="submitBtn" type="button">Submit</button>
-      </div>
+.cardHead h2{
+  margin: 0 0 8px;
+  font-size: 22px;
+  font-weight: 1100;
+}
 
-      <p class="hint center" id="relayHint"></p>
-    </section>
+.muted{ color: var(--muted); margin: 0; font-weight: 800; }
+.small{ font-size: 13px; }
+.hint{ margin: 8px 0 0; color: rgba(7,16,35,0.68); font-weight: 850; font-size: 13px; }
+.center{ text-align:center; }
 
-    <!-- RESULTS -->
-    <section class="card hidden" id="screenResults">
-      <div class="card-head">
-        <h2>Results</h2>
-        <p class="muted">Tick anything wrong after checking the marking scheme. Blanks count as wrong automatically.</p>
-      </div>
+.hr{
+  height: 1px;
+  background: rgba(7,16,35,0.10);
+  margin: 16px 0;
+}
 
-      <div class="results-top">
-        <div class="bigstat">
-          <div class="biglabel">Time</div>
-          <div class="bigvalue" id="timeOut">00:00.0</div>
-        </div>
-        <div class="bigstat">
-          <div class="biglabel">Wrong</div>
-          <div class="bigvalue" id="wrongOut">0</div>
-        </div>
-        <div class="bigstat">
-          <div class="biglabel">Final score</div>
-          <div class="bigvalue" id="scoreOut">0.0s</div>
-        </div>
-        <div class="bigstat">
-          <div class="biglabel">Result code</div>
-          <div class="bigvalue code" id="codeOut">------</div>
-        </div>
-      </div>
+/* Layout */
+.grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 12px;
+}
 
-      <div class="divider"></div>
+.span2{ grid-column: 1 / -1; }
 
-      <div class="btn-row">
-        <button class="btn btn-soft" id="markAllCorrectBtn" type="button">Mark all as correct</button>
-        <button class="btn btn-soft" id="markBlanksWrongBtn" type="button">Mark blanks as wrong</button>
-      </div>
+@media (max-width: 900px){
+  .topbar{ flex-direction: column; }
+  .pills{ justify-content:flex-start; }
+  .grid{ grid-template-columns: 1fr; }
+  .span2{ grid-column: auto; }
+}
 
-      <div id="answerList" class="answer-list"></div>
+/* Controls (comfy) */
+.field label{
+  display:block;
+  margin: 0 0 8px;
+  font-weight: 1100;
+}
 
-      <div class="divider"></div>
+select, input, textarea{
+  width: 100%;
+  font-size: 18px;
+  padding: 14px 16px;
+  min-height: 56px;
+  border-radius: 16px;
+  border: 1px solid rgba(7,16,35,0.16);
+  background: rgba(255,255,255,0.92);
+  color: rgba(2,6,23,0.92);
+  outline:none;
+  box-shadow: 0 10px 18px rgba(2,6,23,0.10);
+  font-weight: 900;
+}
 
-      <div class="btn-row">
-        <button class="btn btn-soft" id="copyBtn" type="button">Copy Result</button>
-        <button class="btn btn-primary" id="playAgainBtn" type="button">Play Again</button>
-        <button class="btn btn-ghost" id="backHomeBtn" type="button">Back to Menu</button>
-      </div>
+textarea{
+  min-height: 130px;
+  resize: vertical;
+}
 
-      <p class="copyright">
-        © Turbo Aural — practice tool. External exam audio/papers remain the property of their respective rights holders.
-      </p>
-    </section>
-  </main>
+input::placeholder{ color: rgba(2,6,23,0.42); font-weight: 850; }
 
-  <!-- Modal for "Open Audio" (EducatePlus page vs direct MP3) -->
-  <div class="modal hidden" id="audioModal" role="dialog" aria-modal="true" aria-labelledby="audioModalTitle">
-    <div class="modal-card">
-      <div class="modal-head">
-        <h3 id="audioModalTitle">Open audio</h3>
-        <button class="btn btn-ghost" id="closeModalBtn" type="button">Close</button>
-      </div>
-      <div class="modal-body" id="audioModalBody"></div>
-      <div class="modal-foot">
-        <small class="muted">
-          Tip: If direct MP3 links ever fail, use “Open EducatePlus page” and select the year there.
-        </small>
-      </div>
-    </div>
-  </div>
+/* Buttons */
+.btnRow{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap: wrap;
+}
+.btnRow input{ flex: 1; }
 
-  <script src="script.js?v=TAURAL_HLOL_1"></script>
-</body>
-</html>
+.btn{
+  border: 0;
+  cursor:pointer;
+  font-weight: 1100;
+  border-radius: 16px;
+  padding: 14px 16px;
+  min-height: 56px;
+  box-shadow: 0 12px 22px rgba(2,6,23,0.16);
+  transition: transform .06s ease, filter .15s ease;
+}
+.btn:active{ transform: translateY(1px) scale(0.99); }
+.btn:hover{ filter: brightness(1.03); }
+
+.btn.primary{
+  color: rgba(255,255,255,0.98);
+  background: linear-gradient(135deg, var(--blue), var(--purple));
+}
+
+.btn.soft{
+  color: rgba(2,6,23,0.92);
+  background: linear-gradient(135deg, rgba(250,204,21,0.58), rgba(34,197,94,0.34));
+  border: 1px solid rgba(7,16,35,0.10);
+}
+
+.btn.ghost{
+  color: rgba(2,6,23,0.92);
+  background: rgba(255,255,255,0.70);
+  border: 1px solid rgba(7,16,35,0.12);
+  box-shadow: none;
+}
+
+.btn.tiny{
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  font-weight: 1000;
+}
+
+/* Mini row */
+.miniRow{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  justify-content:space-between;
+  margin-top: 10px;
+}
+.mini{
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(7,16,35,0.12);
+  font-weight: 1000;
+}
+
+/* Motivation */
+.motivation{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 900px){
+  .motivation{ grid-template-columns: 1fr; }
+}
+.motBox{
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(7,16,35,0.12);
+}
+.motK{ font-weight: 1000; color: rgba(7,16,35,0.70); font-size: 12px; margin-bottom: 6px; }
+.motV{ font-weight: 1200; font-size: 20px; }
+
+/* Rules */
+.rules{
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,0.72);
+  border: 1px solid rgba(7,16,35,0.14);
+}
+.rules summary{ cursor:pointer; font-weight: 1100; }
+.rules ol{ margin: 10px 0 0 18px; font-weight: 850; color: rgba(2,6,23,0.86); }
+.rules li{ margin: 6px 0; }
+
+.hidden{ display:none !important; }
+
+/* Game */
+.gameHead{
+  display:flex;
+  justify-content:space-between;
+  gap: 12px;
+  align-items:flex-start;
+  margin-bottom: 12px;
+}
+.gameRight{
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+.timer{
+  font-size: 38px;
+  font-weight: 1200;
+  letter-spacing: 0.02em;
+}
+
+.meta{ display:flex; flex-wrap:wrap; gap: 8px; }
+.tag{
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.80);
+  border: 1px solid rgba(7,16,35,0.12);
+  font-weight: 1000;
+}
+
+.prompt{
+  border-radius: 18px;
+  padding: 14px;
+  border: 1px solid rgba(7,16,35,0.12);
+  background: rgba(255,255,255,0.72);
+}
+.promptTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.promptTitle{ font-weight: 1200; }
+.promptBadge{
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 1100;
+  background: rgba(37,99,235,0.12);
+  border: 1px solid rgba(37,99,235,0.22);
+}
+.promptText{
+  color: rgba(2,6,23,0.82);
+  font-weight: 850;
+  margin-bottom: 10px;
+}
+
+.nav{
+  display:flex;
+  justify-content:space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* Results */
+.stats{
+  display:grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+@media (max-width: 900px){
+  .stats{ grid-template-columns: 1fr 1fr; }
+}
+
+.stat{
+  border-radius: 18px;
+  padding: 12px;
+  border: 1px solid rgba(7,16,35,0.12);
+  background: rgba(255,255,255,0.72);
+}
+.k{ font-weight: 1000; color: rgba(7,16,35,0.70); font-size: 12px; margin-bottom: 6px; }
+.v{ font-weight: 1200; font-size: 22px; }
+.code{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  letter-spacing: 2px;
+}
+
+.speedMark{
+  border-radius: 18px;
+  padding: 14px;
+  border: 1px solid rgba(7,16,35,0.12);
+  background: rgba(255,255,255,0.72);
+}
+.speedTop h3{ margin: 0 0 6px; font-weight: 1100; }
+
+.markGrid{
+  display:grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 10px;
+  margin: 12px 0 12px;
+}
+@media (max-width: 900px){
+  .markGrid{ grid-template-columns: repeat(5, 1fr); }
+}
+
+.markBtn{
+  min-height: 62px;
+  border-radius: 18px;
+  border: 1px solid rgba(7,16,35,0.14);
+  background: rgba(255,255,255,0.90);
+  font-weight: 1200;
+  font-size: 18px;
+  cursor:pointer;
+  box-shadow: 0 10px 18px rgba(2,6,23,0.10);
+  transition: transform .06s ease, filter .15s ease;
+}
+.markBtn:active{ transform: translateY(1px) scale(0.99); }
+.markBtn.good{ outline: 3px solid rgba(34,197,94,0.24); }
+.markBtn.bad{ outline: 3px solid rgba(239,68,68,0.24); background: rgba(239,68,68,0.12); }
+.markBtn.blank{ box-shadow: 0 0 0 3px rgba(245,158,11,0.22) inset; }
+
+.answers{
+  margin-top: 14px;
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.answerItem{
+  border-radius: 18px;
+  padding: 12px;
+  border: 1px solid rgba(7,16,35,0.12);
+  background: rgba(255,255,255,0.72);
+}
+.answerHead{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.answerHead b{ font-weight: 1200; }
+.answerBody{
+  white-space: pre-wrap;
+  font-weight: 850;
+  color: rgba(2,6,23,0.92);
+}
+.answerBody em{
+  color: rgba(2,6,23,0.62);
+  font-style: normal;
+  font-weight: 1000;
+}
+
+.pbBanner{
+  margin-top: 14px;
+  text-align:center;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(34,197,94,0.25);
+  background: rgba(34,197,94,0.14);
+  font-weight: 1200;
+  animation: pop .35s ease;
+}
+@keyframes pop{
+  from { transform: scale(0.97); opacity: 0.2; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.copyright{
+  margin-top: 14px;
+  text-align:center;
+  font-size:12px;
+  color: rgba(7,16,35,0.72);
+  font-weight: 800;
+}
