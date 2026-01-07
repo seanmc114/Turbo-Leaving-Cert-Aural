@@ -8,9 +8,10 @@
 (function () {
   "use strict";
 
-  // --------- Link-outs (verified pages) ----------
+  // --------- Link-outs ----------
   const EDUCATEPLUS_AUDIO_PAGE =
     "https://www.educateplus.ie/examaudio/leaving-cert-spanish-higher-level-and-ordinary-level";
+
   const paperUrlFor = (year, paperLevel) =>
     `https://exams.ie/papers/leaving-cert/spanish/${paperLevel}/${year}/aural/`;
 
@@ -79,8 +80,12 @@
   }
 
   // Difficulty knobs
-  function penaltyForLevel(level) { return 15 + level * 3; }               // L1=18s ... L10=45s
-  function sprintCapForLevel(level) { return Math.max(45, 78 - level * 3); } // L1~75s ... L10~45s
+  function penaltyForLevel(level) {
+    return 15 + level * 3; // L1=18s ... L10=45s
+  }
+  function sprintCapForLevel(level) {
+    return Math.max(45, 78 - level * 3); // L1~75s ... L10~45s
+  }
 
   // --------- Seeded RNG ----------
   function mulberry32(a) {
@@ -114,14 +119,18 @@
 
   // --------- Match Code (7 chars) ----------
   // Format: [Y][L][P][M][S][S][C]
-  // Y: year index 0..18 (2007..2025) in base36
-  // L: level 1..10 in base36
+  // Y: year index 0..18 (2007..2025) base36
+  // L: level 1..10 base36
   // P: H/O
   // M: C/S/V/R
-  // SS: seed 0..1295 in base36 (00..ZZ)
+  // SS: seed 0..1295 base36 (00..ZZ)
   // C: checksum base36
-  function base36(n) { return n.toString(36).toUpperCase(); }
-  function fromBase36(ch) { return parseInt(ch, 36); }
+  function base36(n) {
+    return n.toString(36).toUpperCase();
+  }
+  function fromBase36(ch) {
+    return parseInt(ch, 36);
+  }
 
   function modeToChar(mode) {
     return ({ classic: "C", sprint: "S", survival: "V", relay: "R" }[mode] || "C");
@@ -129,8 +138,12 @@
   function charToMode(ch) {
     return ({ C: "classic", S: "sprint", V: "survival", R: "relay" }[ch] || "classic");
   }
-  function paperToChar(p) { return p === "ordinary" ? "O" : "H"; }
-  function charToPaper(ch) { return ch === "O" ? "ordinary" : "higher"; }
+  function paperToChar(p) {
+    return p === "ordinary" ? "O" : "H";
+  }
+  function charToPaper(ch) {
+    return ch === "O" ? "ordinary" : "higher";
+  }
 
   function checksum36(nums) {
     let sum = 0;
@@ -186,6 +199,7 @@
       s % 36,
       Math.floor(s / 36),
     ]);
+
     if (expected !== c) return null;
 
     return {
@@ -221,7 +235,6 @@
 
   // --------- Build prompts ----------
   function sectionBadge(i) {
-    // Just a friendly structure (not claiming it's the official format)
     if (i <= 1) return "Intro / Ad";
     if (i <= 3) return "Dialogue";
     if (i <= 5) return "Interview";
@@ -251,9 +264,9 @@
   }
   const ROUNDS_KEY = "taural_rounds_total";
 
-  function loadPB(state) {
+  function loadPB(s) {
     try {
-      const raw = localStorage.getItem(setupKey(state));
+      const raw = localStorage.getItem(setupKey(s));
       if (!raw) return null;
       const obj = JSON.parse(raw);
       if (!obj || typeof obj.bestScore !== "number") return null;
@@ -263,9 +276,9 @@
     }
   }
 
-  function savePBIfBetter(state, scoreSec, wrong, timeMs) {
-    const key = setupKey(state);
-    const current = loadPB(state);
+  function savePBIfBetter(s, scoreSec, wrong, timeMs) {
+    const key = setupKey(s);
+    const current = loadPB(s);
     const entry = {
       bestScore: scoreSec,
       bestWrong: wrong,
@@ -392,11 +405,7 @@
 
   function syncHomeStats() {
     const pb = loadPB(state);
-    if (!pb) {
-      el.pbOut.textContent = "—";
-    } else {
-      el.pbOut.textContent = `${pb.bestScore.toFixed(1)}s (wrong ${pb.bestWrong})`;
-    }
+    el.pbOut.textContent = pb ? `${pb.bestScore.toFixed(1)}s (wrong ${pb.bestWrong})` : "—";
     el.roundsOut.textContent = String(getRounds());
   }
 
@@ -497,14 +506,15 @@
     el.modeSelect.value = state.mode;
 
     el.matchPreview.textContent = `Match: ${parsed.code}`;
+    state.matchCode = parsed.code;
     startRound(parsed.seed, parsed.code);
   }
 
   async function copyMatch() {
-    const txt = (state.matchCode || el.matchPreview.textContent || "").trim();
-    if (!txt || txt.includes("—")) return;
+    const code = (state.matchCode || "").trim();
+    if (!code) return;
     try {
-      await navigator.clipboard.writeText(txt.replace(/^Match:\s*/i, ""));
+      await navigator.clipboard.writeText(code);
       alert("Match copied!");
     } catch {
       alert("Copy failed on this browser/device.");
@@ -650,11 +660,8 @@
     el.codeOut.textContent = code;
 
     renderMarkGrid();
-    if (firstRender) {
-      renderAnswers(false);
-    }
+    if (firstRender) renderAnswers(false);
 
-    // PB check only once per submission
     if (firstRender) {
       const becamePB = savePBIfBetter(state, score, wrong, state.elapsedMs);
       incRounds();
@@ -671,7 +678,6 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "markBtn";
-
       btn.textContent = String(i + 1);
 
       if (blank) btn.classList.add("blank");
@@ -734,8 +740,7 @@
 
   function markAllCorrect() {
     state.wrong = Array(10).fill(false);
-    // blanks will be re-flagged automatically
-    renderResults(false);
+    renderResults(false); // blanks re-flag themselves
   }
 
   function markBlanksWrong() {
@@ -748,7 +753,6 @@
 
   async function copyResult() {
     const { wrong, score } = computeScore();
-
     const txt =
       `Turbo Aural (${state.paperLevel === "higher" ? "HL" : "OL"}) ${state.year}\n` +
       `Level ${state.level} | Mode: ${labelMode(state.mode)}\n` +
@@ -839,7 +843,6 @@
     fillSelects();
     syncPills();
     syncHomeStats();
-
     el.matchPreview.textContent = "Match: —";
     showScreen("home");
     wireEvents();
