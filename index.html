@@ -1,898 +1,216 @@
-/* Turbo Aural (LC Spanish) — TAURAL_HLOL_1
-   - Toggle HL/OL (paper link changes)
-   - Match Code includes Year + HL/OL + Turbo Level + Mode + Seed (7 chars)
-   - Result Code short (6 chars) includes HL/OL + level + wrong + hash
-   - Score: time + (wrong * penalty). Blanks count as wrong.
-*/
-
-(function () {
-  "use strict";
-
-  // ---------------------- Constants ----------------------
-  const YEARS = Array.from({ length: 19 }, (_, i) => 2007 + i); // 2007–2025 :contentReference[oaicite:2]{index=2}
-  const PROMPTS_PER_ROUND = 10;
-
-  // EducatePlus main page (safe fallback if direct MP3 links ever change) :contentReference[oaicite:3]{index=3}
-  const EDUCATEPLUS_PAGE =
-    "https://www.educateplus.ie/examaudio/leaving-cert-spanish-higher-level-and-ordinary-level";
-
-  // Optional direct MP3s (handy). If any ever 404, fallback to EDUCATEPLUS_PAGE.
-  const AUDIO_LINKS = {
-    2025: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2025_7.mp3" }],
-    2024: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2024_7.mp3" }],
-    2023: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2023_6.mp3" }],
-    2022: [
-      { label: "Main (Full)", url: "https://educateplus.ie/sites/default/files/2022_6.mp3" },
-      { label: "Deferred (Full)", url: "https://educateplus.ie/sites/default/files/2022%20LC%20Spanish%20Deferred%20Exam%20Paper%20audio.mp3" },
-    ],
-    2021: Array.from({ length: 7 }, (_, i) => ({
-      label: `Q${i + 1}`,
-      url: `https://educateplus.ie/sites/default/files/2021%20LC%20Spanish%20Question%20${i + 1}.mp3`,
-    })),
-    2020: Array.from({ length: 7 }, (_, i) => ({
-      label: `Q${i + 1}`,
-      url: `https://educateplus.ie/sites/default/files/2020%20LC%20Spanish%20Question%20${i + 1}.mp3`,
-    })),
-    2019: [
-      { label: "Q1", url: "https://educateplus.ie/sites/default/files/2019%20-%201_0.mp3" },
-      { label: "Q2", url: "https://educateplus.ie/sites/default/files/2019%20-2.mp3" },
-      { label: "Q3", url: "https://educateplus.ie/sites/default/files/2019%20-3.mp3" },
-      { label: "Q4", url: "https://educateplus.ie/sites/default/files/2019%20-4.mp3" },
-      { label: "Q5", url: "https://educateplus.ie/sites/default/files/2019%20-5.mp3" },
-      { label: "Q6", url: "https://educateplus.ie/sites/default/files/2019%20-6.mp3" },
-      { label: "Q7", url: "https://educateplus.ie/sites/default/files/2019%20-7.mp3" },
-    ],
-    2018: Array.from({ length: 7 }, (_, i) => ({
-      label: `Q${i + 1}`,
-      url: `https://educateplus.ie/sites/default/files/2018%20-%20Question%20${i + 1}.mp3`,
-    })),
-    2017: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2017%20LC%20Spanish%20Full%20Audio.mp3" }],
-    2016: Array.from({ length: 7 }, (_, i) => ({
-      label: `Q${i + 1}`,
-      url: `https://educateplus.ie/sites/default/files/2016%20-%20Question%20${i + 1}.mp3`,
-    })),
-    2015: [
-      { label: "Q1", url: "https://educateplus.ie/sites/default/files/2015%20-%20Question%201.mp3" },
-      { label: "Q2", url: "https://educateplus.ie/sites/default/files/2015%20-%20Question%202.mp3" },
-      { label: "Q3", url: "https://educateplus.ie/sites/default/files/2015%20-%20Question%203.mp3" },
-      { label: "Q4", url: "https://educateplus.ie/sites/default/files/2015%20-%20Question%204.mp3" },
-      { label: "Q5", url: "https://educateplus.ie/sites/default/files/2015%20-%20Question%205.mp3" },
-      { label: "Q6", url: "https://educateplus.ie/sites/default/files/2015%20-%20Quesiton%206.mp3" }, // typo on site
-      { label: "Q7", url: "https://educateplus.ie/sites/default/files/2015%20-%20Question%207.mp3" },
-    ],
-    2014: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2014.mp3" }],
-    2013: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2013_6.mp3" }],
-    2012: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2012_7.mp3" }],
-    2011: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2011_7.mp3" }],
-    2010: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2010_7.mp3" }],
-    2009: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2009_7.mp3" }],
-    2008: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2008%20LC%20Spanish.mp3" }],
-    2007: [{ label: "Full", url: "https://educateplus.ie/sites/default/files/2007%20LC%20Spanish.mp3" }],
-  };
-
-  // Exams.ie paper aural pages exist for HL and OL by year (example: 2024 OL). :contentReference[oaicite:4]{index=4}
-  const paperUrlFor = (year, paperLevel) =>
-    `https://exams.ie/papers/leaving-cert/spanish/${paperLevel}/${year}/aural/`;
-
-  // ---------------------- Prompt Pools (exam-style, copyright-safe) ----------------------
-  const EASY = [
-    "Write ONE key detail (name / place / time) from the opening announcement.",
-    "Catch a NUMBER (price, date, age, time). Write it clearly.",
-    "Who is speaking? (role/job/relationship).",
-    "What is the main topic? (1 short phrase).",
-    "Give ONE reason mentioned (because / para / debido a).",
-    "Write ONE positive detail and ONE negative detail.",
-    "What is the plan for today/tomorrow? (1 sentence).",
-    "Weather: give ONE detail (temperature / region / time).",
-    "News: what happened? (1 sentence).",
-    "Write ONE opinion word you heard (e.g., genial / fatal / increíble).",
-    "Interview: when did it start/begin? (time reference).",
-    "Dialogue: what problem is being discussed?",
-    "What is being offered/promoted? (product/service).",
-    "What must people do? (instruction / requirement).",
-    "What is NOT allowed / prohibited? (1 detail).",
-  ];
-
-  const MED = [
-    "Summarise the speaker’s goal in ONE sentence.",
-    "Interview: give TWO details about the person’s background.",
-    "Dialogue: what is the disagreement/misunderstanding?",
-    "Give TWO reasons (2 separate points).",
-    "Explain the solution proposed (1–2 sentences).",
-    "Identify a contrast (pero / sin embargo / aunque) and both sides.",
-    "Find a consequence/result mentioned (so/therefore).",
-    "Weather: give 2 regions + what will happen there.",
-    "News: who is affected + how?",
-    "Give one example mentioned (activity/place/feature).",
-    "Identify attitude (positive/negative/neutral) + one clue word.",
-    "What advice is given? (2 points).",
-    "What changed over time? (before vs now).",
-    "Main benefit + main drawback.",
-    "What is the next step suggested?",
-  ];
-
-  const HARD = [
-    "Infer what the speaker REALLY thinks (1 sentence + 1 clue).",
-    "Interview: give the key turning point + why it mattered.",
-    "Dialogue: list 3 distinct details (fast notes).",
-    "Explain the purpose AND the audience (who it’s for).",
-    "Spot a ‘trap’ detail (something corrected/clarified).",
-    "Summarise using connectors (primero… luego… finalmente…).",
-    "Give a precise timeline (sequence of events).",
-    "Weather: compare today vs tomorrow (2 differences).",
-    "News: cause + effect + reaction (3-part chain).",
-    "Extract one quote-worthy short phrase and explain it.",
-    "Give 2 supporting details for one claim.",
-    "Identify a condition (if/when) and what happens then.",
-    "Identify a recommendation + justification.",
-    "What is surprising/unexpected? (1 detail).",
-    "Summarise in exactly 12–15 words.",
-  ];
-
-  function poolForTurboLevel(level) {
-    if (level <= 3) return EASY;
-    if (level <= 7) return MED;
-    return HARD;
-  }
-
-  // Difficulty knobs
-  function penaltyForTurboLevel(level) { return 15 + (level * 3); }     // L1=18s ... L10=45s
-  function sprintCapForTurboLevel(level) { return Math.max(45, 78 - level * 3); } // L1~75s ... L10~45s
-
-  // ---------------------- Utility ----------------------
-  const $ = (id) => document.getElementById(id);
-
-  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
-  function pad2(n){ return String(n).padStart(2, "0"); }
-
-  function fmtTime(ms){
-    const t = Math.max(0, ms);
-    const totalSec = t / 1000;
-    const m = Math.floor(totalSec / 60);
-    const s = Math.floor(totalSec % 60);
-    const d = Math.floor((totalSec - Math.floor(totalSec)) * 10);
-    return `${pad2(m)}:${pad2(s)}.${d}`;
-  }
-
-  // Seeded RNG
-  function mulberry32(a) {
-    return function() {
-      let t = a += 0x6D2B79F5;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  function base36(n){ return n.toString(36).toUpperCase(); }
-  function fromBase36(ch){ return parseInt(ch, 36); }
-
-  // ---------------------- Match Code (7 chars) ----------------------
-  // Format: [Y][L][P][M][S][S][C]
-  // Y = year index 0..18 (2007..2025)
-  // L = turbo level 1..10
-  // P = H or O (paper level)
-  // M = C/S/V/R (classic/sprint/survival/relay)
-  // SS = seed 0..1295 in base36 (00..ZZ)
-  // C = checksum base36
-  function modeToChar(mode){
-    return ({ classic:"C", sprint:"S", survival:"V", relay:"R" }[mode] || "C");
-  }
-  function charToMode(ch){
-    return ({ C:"classic", S:"sprint", V:"survival", R:"relay" }[ch] || "classic");
-  }
-  function paperToChar(paperLevel){
-    return paperLevel === "ordinary" ? "O" : "H";
-  }
-  function charToPaper(ch){
-    return ch === "O" ? "ordinary" : "higher";
-  }
-
-  function checksum36(nums){
-    let sum = 0;
-    for (const n of nums) sum = (sum + (n|0)) % 36;
-    return base36(sum);
-  }
-
-  function makeMatchCode({ year, turboLevel, paperLevel, mode, seed }) {
-    const y = clamp(year - 2007, 0, 18);
-    const l = clamp(turboLevel, 1, 10);
-    const p = paperToChar(paperLevel);
-    const m = modeToChar(mode);
-    const s = clamp(seed, 0, 1295);
-
-    const ych = base36(y);
-    const lch = base36(l);
-    const sch = base36(s).padStart(2, "0");
-
-    // checksum includes all components
-    const c = checksum36([y, l, p === "H" ? 17 : 29, m.charCodeAt(0) % 36, s % 36, Math.floor(s / 36)]);
-
-    return `${ych}${lch}${p}${m}${sch}${c}`;
-  }
-
-  function parseMatchCode(raw) {
-    const code = (raw || "").toUpperCase().replace(/\s+/g, "");
-    if (code.length !== 7) return null;
-
-    const y = fromBase36(code[0]);
-    const l = fromBase36(code[1]);
-    const p = code[2];
-    const m = code[3];
-    const s = fromBase36(code.slice(4,6));
-    const c = code[6];
-
-    if (!Number.isFinite(y) || y < 0 || y > 18) return null;
-    if (!Number.isFinite(l) || l < 1 || l > 10) return null;
-    if (!["H","O"].includes(p)) return null;
-    if (!["C","S","V","R"].includes(m)) return null;
-    if (!Number.isFinite(s) || s < 0 || s > 1295) return null;
-
-    const expected = checksum36([y, l, p === "H" ? 17 : 29, m.charCodeAt(0) % 36, s % 36, Math.floor(s / 36)]);
-    if (expected !== c) return null;
-
-    return {
-      year: 2007 + y,
-      turboLevel: l,
-      paperLevel: charToPaper(p),
-      mode: charToMode(m),
-      seed: s
-    };
-  }
-
-  // ---------------------- Result Code (6 chars) ----------------------
-  // Format: [P][L][W][H][H][H]
-  // P = H or O, L=level (base36), W=wrong (base36), HHH = hash
-  function makeResultCode({ paperLevel, turboLevel, wrong, year, mode, seed, scoreRounded }) {
-    const P = paperToChar(paperLevel);
-    const L = base36(clamp(turboLevel, 1, 10));
-    const W = base36(clamp(wrong, 0, 35));
-
-    // small hash
-    let mix =
-      (year * 97) ^
-      (turboLevel * 131) ^
-      ((P === "H" ? 17 : 29) * 997) ^
-      (modeToChar(mode).charCodeAt(0) * 23) ^
-      (seed * 1009) ^
-      (scoreRounded * 3) ^
-      (wrong * 11);
-
-    mix = Math.abs(mix) % (36 ** 3);
-    const HHH = base36(mix).padStart(3, "0");
-
-    return `${P}${L}${W}${HHH}`;
-  }
-
-  // ---------------------- Prompts ----------------------
-  function sectionBadge(i){
-    if (i <= 1) return "ANUNCIO / Intro";
-    if (i <= 3) return "DIÁLOGO";
-    if (i <= 5) return "ENTREVISTA";
-    if (i <= 7) return "DESCRIPTIVO";
-    if (i === 8) return "EL TIEMPO";
-    return "NOTICIA";
-  }
-
-  function buildPrompts({ turboLevel, seed, year }) {
-    const pool = poolForTurboLevel(turboLevel);
-    const rng = mulberry32(seed + turboLevel * 9991 + year * 13);
-
-    // choose 10 unique indices
-    const idx = Array.from({ length: pool.length }, (_, i) => i);
-    for (let i = idx.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [idx[i], idx[j]] = [idx[j], idx[i]];
-    }
-
-    return idx.slice(0, PROMPTS_PER_ROUND).map((k, i) => ({
-      id: i + 1,
-      title: `Prompt ${i + 1}`,
-      badge: sectionBadge(i),
-      text: pool[k]
-    }));
-  }
-
-  // ---------------------- State ----------------------
-  const state = {
-    year: 2024,
-    paperLevel: "higher", // higher | ordinary
-    turboLevel: 1,
-    mode: "classic", // classic | sprint | survival | relay
-    seed: 0,
-    matchCode: "",
-
-    prompts: [],
-    answers: Array(PROMPTS_PER_ROUND).fill(""),
-    wrong: Array(PROMPTS_PER_ROUND).fill(false),
-
-    startedAt: 0,
-    elapsedMs: 0,
-    timerHandle: null,
-
-    currentIndex: 0,
-    sprintCapMs: 0,
-
-    relayTurn: "A",
-    relaySplitIndex: 5
-  };
-
-  // ---------------------- Elements ----------------------
-  const el = {
-    pillYear: $("pillYear"),
-    pillPaperLevel: $("pillPaperLevel"),
-    pillMode: $("pillMode"),
-
-    home: $("screenHome"),
-    game: $("screenGame"),
-    results: $("screenResults"),
-
-    yearSelect: $("yearSelect"),
-    paperLevelSelect: $("paperLevelSelect"),
-    levelSelect: $("levelSelect"),
-    modeSelect: $("modeSelect"),
-
-    openAudioBtn: $("openAudioBtn"),
-    openPaperBtn: $("openPaperBtn"),
-
-    matchInput: $("matchInput"),
-    joinMatchBtn: $("joinMatchBtn"),
-    newMatchBtn: $("newMatchBtn"),
-    startSoloBtn: $("startSoloBtn"),
-
-    gameTitle: $("gameTitle"),
-    matchTag: $("matchTag"),
-    penaltyTag: $("penaltyTag"),
-    capTag: $("capTag"),
-    timer: $("timer"),
-
-    audioQuickBtn: $("audioQuickBtn"),
-    paperQuickBtn: $("paperQuickBtn"),
-    quitBtn: $("quitBtn"),
-
-    promptWrap: $("promptWrap"),
-    prevBtn: $("prevBtn"),
-    nextBtn: $("nextBtn"),
-    submitBtn: $("submitBtn"),
-    relayHint: $("relayHint"),
-
-    timeOut: $("timeOut"),
-    wrongOut: $("wrongOut"),
-    scoreOut: $("scoreOut"),
-    codeOut: $("codeOut"),
-    answerList: $("answerList"),
-
-    markAllCorrectBtn: $("markAllCorrectBtn"),
-    markBlanksWrongBtn: $("markBlanksWrongBtn"),
-
-    copyBtn: $("copyBtn"),
-    playAgainBtn: $("playAgainBtn"),
-    backHomeBtn: $("backHomeBtn"),
-
-    audioModal: $("audioModal"),
-    audioModalBody: $("audioModalBody"),
-    closeModalBtn: $("closeModalBtn"),
-  };
-
-  // ---------------------- UI Helpers ----------------------
-  function labelMode(m){
-    return ({ classic:"Classic", sprint:"Sprint", survival:"Survival", relay:"Relay" }[m] || "Classic");
-  }
-  function labelPaper(p){
-    return p === "ordinary" ? "Ordinary" : "Higher";
-  }
-
-  function syncPills(){
-    el.pillYear.textContent = `Year: ${state.year}`;
-    el.pillPaperLevel.textContent = `Paper: ${state.paperLevel === "higher" ? "HL" : "OL"}`;
-    el.pillMode.textContent = `Mode: ${labelMode(state.mode)}`;
-  }
-
-  function showScreen(which){
-    el.home.classList.toggle("hidden", which !== "home");
-    el.game.classList.toggle("hidden", which !== "game");
-    el.results.classList.toggle("hidden", which !== "results");
-  }
-
-  // ---------------------- Links ----------------------
-  function openPaper(){
-    window.open(paperUrlFor(state.year, state.paperLevel), "_blank", "noopener,noreferrer");
-  }
-
-  function openAudio(){
-    const links = AUDIO_LINKS[state.year] || [];
-    openAudioModal(links);
-  }
-
-  function openAudioModal(links){
-    el.audioModalBody.innerHTML = "";
-
-    const pageBtn = document.createElement("button");
-    pageBtn.className = "btn btn-primary";
-    pageBtn.type = "button";
-    pageBtn.textContent = `Open EducatePlus page (select ${state.year})`;
-    pageBtn.onclick = () => window.open(EDUCATEPLUS_PAGE, "_blank", "noopener,noreferrer");
-    el.audioModalBody.appendChild(pageBtn);
-
-    if (!links.length){
-      const note = document.createElement("div");
-      note.style.fontWeight = "900";
-      note.style.color = "rgba(2,6,23,0.80)";
-      note.textContent = "No direct MP3 links stored for this year. Use the EducatePlus page.";
-      el.audioModalBody.appendChild(note);
-    } else if (links.length === 1) {
-      const b = document.createElement("button");
-      b.className = "btn btn-soft";
-      b.type = "button";
-      b.textContent = `Open direct MP3 (${links[0].label})`;
-      b.onclick = () => window.open(links[0].url, "_blank", "noopener,noreferrer");
-      el.audioModalBody.appendChild(b);
-    } else {
-      const allBtn = document.createElement("button");
-      allBtn.className = "btn btn-soft";
-      allBtn.type = "button";
-      allBtn.textContent = "Open ALL MP3 parts (multiple tabs)";
-      allBtn.onclick = () => links.forEach(l => window.open(l.url, "_blank", "noopener,noreferrer"));
-      el.audioModalBody.appendChild(allBtn);
-
-      links.forEach(l => {
-        const b = document.createElement("button");
-        b.className = "btn btn-soft";
-        b.type = "button";
-        b.textContent = `Open MP3 ${l.label}`;
-        b.onclick = () => window.open(l.url, "_blank", "noopener,noreferrer");
-        el.audioModalBody.appendChild(b);
-      });
-    }
-
-    el.audioModal.classList.remove("hidden");
-  }
-
-  function closeModal(){
-    el.audioModal.classList.add("hidden");
-  }
-
-  // ---------------------- Round Build ----------------------
-  function resetRun(){
-    state.prompts = [];
-    state.answers = Array(PROMPTS_PER_ROUND).fill("");
-    state.wrong = Array(PROMPTS_PER_ROUND).fill(false);
-    state.elapsedMs = 0;
-    state.startedAt = 0;
-    state.timerHandle = null;
-    state.currentIndex = 0;
-    state.relayTurn = "A";
-    state.sprintCapMs = sprintCapForTurboLevel(state.turboLevel) * 1000;
-  }
-
-  function startWith(seed, matchCode){
-    resetRun();
-    state.seed = seed;
-    state.matchCode = matchCode || "";
-
-    state.prompts = buildPrompts({ turboLevel: state.turboLevel, seed: state.seed, year: state.year });
-
-    syncPills();
-    showScreen("game");
-    renderGame();
-    startTimer();
-  }
-
-  function startSolo(){
-    const seed = Math.floor(Math.random() * 1296);
-    startWith(seed, "");
-  }
-
-  function newMatch(){
-    const seed = Math.floor(Math.random() * 1296);
-    const match = makeMatchCode({
-      year: state.year,
-      turboLevel: state.turboLevel,
-      paperLevel: state.paperLevel,
-      mode: state.mode,
-      seed
-    });
-
-    alert(`Match Code: ${match}\n\nShare this 7-character code.\nIt locks Year + HL/OL + Turbo Level + Mode.`);
-    startWith(seed, match);
-  }
-
-  function joinMatch(){
-    const parsed = parseMatchCode(el.matchInput.value);
-    if (!parsed){
-      alert("That Match Code doesn’t look right. It must be 7 characters.");
-      return;
-    }
-
-    state.year = parsed.year;
-    state.turboLevel = parsed.turboLevel;
-    state.paperLevel = parsed.paperLevel;
-    state.mode = parsed.mode;
-
-    // sync dropdowns
-    el.yearSelect.value = String(state.year);
-    el.levelSelect.value = String(state.turboLevel);
-    el.paperLevelSelect.value = state.paperLevel;
-    el.modeSelect.value = state.mode;
-
-    const normalised = makeMatchCode(parsed);
-    startWith(parsed.seed, normalised);
-  }
-
-  // ---------------------- Timer ----------------------
-  function startTimer(){
-    state.startedAt = performance.now();
-    stopTimer();
-    state.timerHandle = window.setInterval(() => {
-      const now = performance.now();
-      state.elapsedMs = now - state.startedAt;
-
-      if (state.mode === "sprint" && state.elapsedMs >= state.sprintCapMs) {
-        state.elapsedMs = state.sprintCapMs;
-        el.timer.textContent = fmtTime(state.elapsedMs);
-        submitRun();
-        return;
-      }
-      el.timer.textContent = fmtTime(state.elapsedMs);
-    }, 80);
-  }
-
-  function stopTimer(){
-    if (state.timerHandle){
-      clearInterval(state.timerHandle);
-      state.timerHandle = null;
-    }
-  }
-
-  // ---------------------- Render Game ----------------------
-  function renderGame(){
-    el.matchTag.textContent = state.matchCode ? `Match: ${state.matchCode}` : "Match: (solo)";
-
-    const pen = penaltyForTurboLevel(state.turboLevel);
-    el.penaltyTag.textContent = `Penalty: +${pen}s per wrong`;
-
-    el.capTag.textContent =
-      state.mode === "sprint"
-        ? `Sprint cap: ${sprintCapForTurboLevel(state.turboLevel)}s`
-        : "Sprint cap: —";
-
-    el.gameTitle.textContent = `${labelPaper(state.paperLevel)} · ${state.year} · Turbo Level ${state.turboLevel} · ${labelMode(state.mode)}`;
-
-    el.timer.textContent = "00:00.0";
-    el.promptWrap.innerHTML = "";
-
-    if (state.mode === "sprint"){
-      el.prevBtn.classList.add("hidden");
-      el.nextBtn.classList.add("hidden");
-      el.submitBtn.classList.remove("hidden");
-
-      state.prompts.forEach((p, idx) => el.promptWrap.appendChild(promptCard(p, idx)));
-
-      el.relayHint.textContent = `Sprint: timer auto-submits at ${sprintCapForTurboLevel(state.turboLevel)} seconds.`;
-      return;
-    }
-
-    el.prevBtn.classList.remove("hidden");
-    el.nextBtn.classList.remove("hidden");
-    el.submitBtn.classList.add("hidden");
-
-    el.promptWrap.appendChild(promptCard(state.prompts[state.currentIndex], state.currentIndex));
-    updateNavButtons();
-    updateRelayHint();
-  }
-
-  function promptCard(p, idx){
-    const wrap = document.createElement("div");
-    wrap.className = "prompt";
-
-    const top = document.createElement("div");
-    top.className = "prompt-top";
-
-    const title = document.createElement("div");
-    title.className = "prompt-title";
-    title.textContent = `${p.title}`;
-
-    const badge = document.createElement("div");
-    badge.className = "prompt-badge";
-    badge.textContent = p.badge;
-
-    top.appendChild(title);
-    top.appendChild(badge);
-
-    const text = document.createElement("div");
-    text.innerHTML = `<small>${escapeHtml(p.text)}</small>`;
-
-    const ta = document.createElement("textarea");
-    ta.className = "answerbox";
-    ta.placeholder = "Type your answer / notes…";
-    ta.value = state.answers[idx] || "";
-    ta.addEventListener("input", () => { state.answers[idx] = ta.value; });
-
-    wrap.appendChild(top);
-    wrap.appendChild(text);
-    wrap.appendChild(ta);
-
-    return wrap;
-  }
-
-  function escapeHtml(s){
-    return String(s).replace(/[&<>"']/g, (ch) => ({
-      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
-    }[ch]));
-  }
-
-  function updateNavButtons(){
-    el.prevBtn.disabled = state.currentIndex === 0;
-    const isLast = state.currentIndex === state.prompts.length - 1;
-
-    if (isLast){
-      el.nextBtn.classList.add("hidden");
-      el.submitBtn.classList.remove("hidden");
-    } else {
-      el.nextBtn.classList.remove("hidden");
-      el.submitBtn.classList.add("hidden");
-    }
-  }
-
-  function updateRelayHint(){
-    if (state.mode !== "relay"){
-      el.relayHint.textContent = "";
-      return;
-    }
-    const turn = state.relayTurn;
-    const range = turn === "A" ? "Prompts 1–5" : "Prompts 6–10";
-    el.relayHint.textContent = `Relay: Player ${turn} is answering ${range}.`;
-  }
-
-  // ---------------------- Navigation ----------------------
-  function goPrev(){
-    if (state.mode === "sprint") return;
-    state.currentIndex = Math.max(0, state.currentIndex - 1);
-    renderGame();
-  }
-
-  function goNext(){
-    if (state.mode === "sprint") return;
-
-    // relay handoff after prompt 5
-    if (state.mode === "relay" && state.relayTurn === "A" && state.currentIndex === state.relaySplitIndex - 1){
-      state.relayTurn = "B";
-      state.currentIndex = state.relaySplitIndex;
-      renderGame();
-      return;
-    }
-
-    state.currentIndex = Math.min(state.prompts.length - 1, state.currentIndex + 1);
-    renderGame();
-  }
-
-  // ---------------------- Scoring ----------------------
-  function computeScore(){
-    const penalty = penaltyForTurboLevel(state.turboLevel);
-    const timeSec = state.elapsedMs / 1000;
-
-    let wrong = 0;
-    for (let i = 0; i < PROMPTS_PER_ROUND; i++){
-      const blank = !String(state.answers[i] || "").trim();
-      if (state.wrong[i] || blank) wrong++;
-    }
-
-    const final = timeSec + wrong * penalty;
-    return { timeSec, wrong, penalty, final };
-  }
-
-  // ---------------------- Submit & Results ----------------------
-  function submitRun(){
-    stopTimer();
-    showScreen("results");
-    renderResults();
-  }
-
-  function renderResults(){
-    const { wrong, final } = computeScore();
-
-    el.timeOut.textContent = fmtTime(state.elapsedMs);
-    el.wrongOut.textContent = String(wrong);
-    el.scoreOut.textContent = `${final.toFixed(1)}s`;
-
-    const scoreRounded = Math.round(final);
-    const code = makeResultCode({
-      paperLevel: state.paperLevel,
-      turboLevel: state.turboLevel,
-      wrong,
-      year: state.year,
-      mode: state.mode,
-      seed: state.seed,
-      scoreRounded
-    });
-    el.codeOut.textContent = code;
-
-    el.answerList.innerHTML = "";
-
-    // Survival outcome banner
-    if (state.mode === "survival"){
-      const box = document.createElement("div");
-      box.className = "info-box";
-      box.style.marginBottom = "10px";
-      const ok = wrong === 0;
-      box.innerHTML = `<h3>Survival: ${ok ? "✅ SURVIVED" : "❌ OUT"}</h3>
-        <p class="muted">${ok ? "Perfect round (0 wrong)." : "Survival requires 0 wrong (blanks count too). Try again!"}</p>`;
-      el.answerList.appendChild(box);
-    }
-
-    state.prompts.forEach((p, i) => {
-      const item = document.createElement("div");
-      item.className = "answer-item";
-
-      const head = document.createElement("div");
-      head.className = "answer-head";
-
-      const left = document.createElement("div");
-      left.innerHTML = `<b>${p.title}</b> <span class="tag" style="margin-left:8px;">${p.badge}</span>`;
-
-      const right = document.createElement("label");
-      right.className = "wrong-toggle";
-      right.innerHTML = `<input type="checkbox" ${state.wrong[i] ? "checked" : ""} /> Wrong`;
-      const cb = right.querySelector("input");
-
-      cb.addEventListener("change", () => {
-        state.wrong[i] = cb.checked;
-        updateResultsTop();
-      });
-
-      head.appendChild(left);
-      head.appendChild(right);
-
-      const ans = document.createElement("div");
-      ans.className = "answer-text";
-      const txt = String(state.answers[i] || "").trim();
-      ans.textContent = txt ? txt : "(blank — counts as wrong)";
-
-      item.appendChild(head);
-      item.appendChild(ans);
-
-      el.answerList.appendChild(item);
-    });
-
-    updateResultsTop();
-  }
-
-  function updateResultsTop(){
-    const { wrong, final } = computeScore();
-    el.wrongOut.textContent = String(wrong);
-    el.scoreOut.textContent = `${final.toFixed(1)}s`;
-
-    const code = makeResultCode({
-      paperLevel: state.paperLevel,
-      turboLevel: state.turboLevel,
-      wrong,
-      year: state.year,
-      mode: state.mode,
-      seed: state.seed,
-      scoreRounded: Math.round(final)
-    });
-    el.codeOut.textContent = code;
-  }
-
-  // ---------------------- Copy ----------------------
-  async function copyResult(){
-    const { final, wrong } = computeScore();
-    const txt =
-      `Turbo Aural (${state.paperLevel === "higher" ? "HL" : "OL"}) | ${state.year}\n` +
-      `Turbo Level ${state.turboLevel} | Mode: ${labelMode(state.mode)}\n` +
-      `Match: ${state.matchCode || "(solo)"}\n` +
-      `Time: ${fmtTime(state.elapsedMs)} | Wrong: ${wrong} | Score: ${final.toFixed(1)}s\n` +
-      `Result Code: ${el.codeOut.textContent.trim()}\n` +
-      `Paper: ${paperUrlFor(state.year, state.paperLevel)}\n` +
-      `Audio: ${EDUCATEPLUS_PAGE}`;
-
-    try {
-      await navigator.clipboard.writeText(txt);
-      alert("Copied!");
-    } catch {
-      alert("Could not copy automatically on this browser/device.");
-    }
-  }
-
-  // ---------------------- Init ----------------------
-  function fillSelects(){
-    // years newest first
-    el.yearSelect.innerHTML = YEARS.slice().reverse().map(y => `<option value="${y}">${y}</option>`).join("");
-    el.yearSelect.value = String(state.year);
-
-    // turbo levels
-    el.levelSelect.innerHTML = Array.from({ length: 10 }, (_, i) => {
-      const n = i + 1;
-      return `<option value="${n}">Turbo Level ${n}</option>`;
-    }).join("");
-    el.levelSelect.value = String(state.turboLevel);
-
-    el.paperLevelSelect.value = state.paperLevel;
-    el.modeSelect.value = state.mode;
-  }
-
-  function wireEvents(){
-    el.yearSelect.addEventListener("change", () => {
-      state.year = parseInt(el.yearSelect.value, 10);
-      syncPills();
-    });
-
-    el.paperLevelSelect.addEventListener("change", () => {
-      state.paperLevel = el.paperLevelSelect.value;
-      syncPills();
-    });
-
-    el.levelSelect.addEventListener("change", () => {
-      state.turboLevel = parseInt(el.levelSelect.value, 10);
-      syncPills();
-    });
-
-    el.modeSelect.addEventListener("change", () => {
-      state.mode = el.modeSelect.value;
-      syncPills();
-    });
-
-    el.openAudioBtn.addEventListener("click", openAudio);
-    el.openPaperBtn.addEventListener("click", openPaper);
-    el.audioQuickBtn.addEventListener("click", openAudio);
-    el.paperQuickBtn.addEventListener("click", openPaper);
-
-    el.newMatchBtn.addEventListener("click", newMatch);
-    el.startSoloBtn.addEventListener("click", startSolo);
-    el.joinMatchBtn.addEventListener("click", joinMatch);
-
-    el.prevBtn.addEventListener("click", goPrev);
-    el.nextBtn.addEventListener("click", goNext);
-    el.submitBtn.addEventListener("click", submitRun);
-
-    el.quitBtn.addEventListener("click", () => {
-      stopTimer();
-      showScreen("home");
-    });
-
-    el.copyBtn.addEventListener("click", copyResult);
-
-    el.playAgainBtn.addEventListener("click", () => {
-      // stay on menu, keep settings; user can generate a new match or solo
-      showScreen("home");
-    });
-
-    el.backHomeBtn.addEventListener("click", () => {
-      showScreen("home");
-    });
-
-    el.markAllCorrectBtn.addEventListener("click", () => {
-      state.wrong = Array(PROMPTS_PER_ROUND).fill(false);
-      updateResultsTop();
-      // re-render list checkboxes
-      renderResults();
-    });
-
-    el.markBlanksWrongBtn.addEventListener("click", () => {
-      for (let i = 0; i < PROMPTS_PER_ROUND; i++){
-        const blank = !String(state.answers[i] || "").trim();
-        if (blank) state.wrong[i] = true;
-      }
-      updateResultsTop();
-      renderResults();
-    });
-
-    el.closeModalBtn.addEventListener("click", closeModal);
-    el.audioModal.addEventListener("click", (e) => {
-      if (e.target === el.audioModal) closeModal();
-    });
-
-    el.matchInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") joinMatch();
-    });
-  }
-
-  function boot(){
-    fillSelects();
-    syncPills();
-    wireEvents();
-    showScreen("home");
-  }
-
-  boot();
-})();
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Turbo Aural</title>
+
+  <!-- Cache-buster: change TAURAL_CLEAN_2 to _3 if you don't see updates -->
+  <link rel="stylesheet" href="./style.css?v=TAURAL_CLEAN_2" />
+</head>
+
+<body>
+  <!-- Crest watermark: put crest.png in the same folder -->
+  <div class="crest-watermark" aria-hidden="true"></div>
+
+  <main class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brandMark" aria-hidden="true">TA</div>
+        <div class="brandText">
+          <h1>Turbo Aural</h1>
+          <p class="sub">LC Spanish listening practice — anywhere, anytime</p>
+        </div>
+      </div>
+
+      <div class="pills">
+        <span class="pill" id="pillYear">Year: —</span>
+        <span class="pill" id="pillPaper">Paper: —</span>
+        <span class="pill" id="pillMode">Mode: —</span>
+      </div>
+    </header>
+
+    <!-- HOME -->
+    <section class="card" id="screenHome">
+      <div class="cardHead">
+        <h2>Setup</h2>
+        <p class="muted">
+          Solo practice needs <b>no code</b>. For class competitions, use a <b>Match Code</b> so everyone gets the same prompts.
+        </p>
+      </div>
+
+      <div class="grid">
+        <div class="field">
+          <label for="yearSelect">Exam year</label>
+          <select id="yearSelect"></select>
+        </div>
+
+        <div class="field">
+          <label for="paperSelect">Paper level</label>
+          <select id="paperSelect">
+            <option value="higher">Higher (HL)</option>
+            <option value="ordinary">Ordinary (OL)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="levelSelect">Turbo level (1 easy → 10 tough)</label>
+          <select id="levelSelect"></select>
+        </div>
+
+        <div class="field">
+          <label for="modeSelect">Mode</label>
+          <select id="modeSelect">
+            <option value="classic">Classic</option>
+            <option value="sprint">Sprint (time cap)</option>
+            <option value="survival">Survival (0 wrong)</option>
+            <option value="relay">Relay (A then B)</option>
+          </select>
+        </div>
+
+        <div class="field span2">
+          <label>Quick links</label>
+          <div class="btnRow">
+            <button class="btn soft" id="openAudioBtn" type="button">Open Audio (EducatePlus)</button>
+            <button class="btn soft" id="openPaperBtn" type="button">Open Paper (Exams.ie)</button>
+          </div>
+          <p class="hint">Tip: open audio and paper in separate tabs.</p>
+        </div>
+
+        <div class="field span2">
+          <label>Match Code (optional)</label>
+          <div class="btnRow">
+            <input id="matchInput" maxlength="7" placeholder="Enter 7-char match code" />
+            <button class="btn primary" id="joinBtn" type="button">Join</button>
+            <button class="btn primary" id="newMatchBtn" type="button">Generate</button>
+            <button class="btn ghost" id="soloBtn" type="button">Solo</button>
+          </div>
+          <div class="miniRow">
+            <span class="mini" id="matchPreview">Match: —</span>
+            <button class="btn ghost tiny" id="copyMatchBtn" type="button">Copy match</button>
+          </div>
+        </div>
+
+        <div class="field span2">
+          <label>Motivation</label>
+          <div class="motivation">
+            <div class="motBox">
+              <div class="motK">Personal best (this setup)</div>
+              <div class="motV" id="pbOut">—</div>
+            </div>
+            <div class="motBox">
+              <div class="motK">Rounds completed (device)</div>
+              <div class="motV" id="roundsOut">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <details class="rules">
+        <summary><b>How it works (tap)</b></summary>
+        <ol>
+          <li>Open the audio + paper for your chosen year.</li>
+          <li>Answer 10 prompts (quick notes are fine).</li>
+          <li>At Results, mark wrong answers at <b>insane speed</b> using the 10 big buttons.</li>
+          <li>Score = time + penalties. Result Code is short for calling out in class.</li>
+        </ol>
+      </details>
+
+      <p class="copyright">
+        © Turbo Aural — practice tool. External audio/papers remain the property of their owners.
+      </p>
+    </section>
+
+    <!-- GAME -->
+    <section class="card hidden" id="screenGame">
+      <div class="gameHead">
+        <div>
+          <h2 id="gameTitle">Round</h2>
+          <div class="meta">
+            <span class="tag" id="tagMatch">Match: —</span>
+            <span class="tag" id="tagPenalty">Penalty: —</span>
+            <span class="tag" id="tagCap">Sprint cap: —</span>
+          </div>
+        </div>
+
+        <div class="gameRight">
+          <div class="timer" id="timer">00:00.0</div>
+          <div class="btnRow">
+            <button class="btn soft" id="paperQuickBtn" type="button">Paper</button>
+            <button class="btn soft" id="audioQuickBtn" type="button">Audio</button>
+            <button class="btn ghost" id="quitBtn" type="button">Quit</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="promptArea"></div>
+
+      <div class="nav">
+        <button class="btn ghost" id="prevBtn" type="button">Back</button>
+        <button class="btn primary" id="nextBtn" type="button">Next</button>
+        <button class="btn primary hidden" id="submitBtn" type="button">Submit</button>
+      </div>
+
+      <p class="hint center" id="modeHint"></p>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="card hidden" id="screenResults">
+      <div class="cardHead">
+        <h2>Results</h2>
+        <p class="muted">Mark wrong answers fast. Blanks count as wrong automatically.</p>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="k">Time</div>
+          <div class="v" id="timeOut">00:00.0</div>
+        </div>
+        <div class="stat">
+          <div class="k">Wrong</div>
+          <div class="v" id="wrongOut">0</div>
+        </div>
+        <div class="stat">
+          <div class="k">Score</div>
+          <div class="v" id="scoreOut">0.0s</div>
+        </div>
+        <div class="stat">
+          <div class="k">Result code</div>
+          <div class="v code" id="codeOut">------</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="speedMark">
+        <div class="speedTop">
+          <h3>Insane-speed marking</h3>
+          <p class="muted small">Tap a number to mark it wrong/right. (Wrong = red.)</p>
+        </div>
+
+        <div class="markGrid" id="markGrid"></div>
+
+        <div class="btnRow">
+          <button class="btn soft" id="allCorrectBtn" type="button">All correct</button>
+          <button class="btn soft" id="blanksWrongBtn" type="button">Blanks → wrong</button>
+          <button class="btn ghost" id="expandBtn" type="button">Show answers</button>
+        </div>
+      </div>
+
+      <div class="answers hidden" id="answersWrap"></div>
+
+      <div class="hr"></div>
+
+      <div class="btnRow">
+        <button class="btn soft" id="copyBtn" type="button">Copy result</button>
+        <button class="btn primary" id="playAgainBtn" type="button">Play again</button>
+        <button class="btn ghost" id="homeBtn" type="button">Back to menu</button>
+      </div>
+
+      <div class="pbBanner hidden" id="pbBanner">🏆 New Personal Best!</div>
+    </section>
+  </main>
+
+  <script src="./script.js?v=TAURAL_CLEAN_2"></script>
+</body>
+</html>
